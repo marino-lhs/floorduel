@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Floor Duel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,600;1,800&family=Noto+Music&display=swap">
+<style>
+/* Layout: a game-show stage. Setup and manager are plain panels on the "floor";
+   the duel screen is one full-height grid: top bar / clue card / two clocks. */
+:root {
+  --stage: #0d1131;
+  --stage-2: #151a44;
+  --tile: #1c2257;
+  --edge: #2b3274;
+  --fg: #eef0ff;
+  --muted: #a3a9d9;
+  --paper: #fbf8f1;
+  --ink: #17161d;
+  --p1: #ffb23e;
+  --p2: #3fd3e6;
+  --danger: #ff5c63;
+  --good: #63e3a0;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --engrave: "Playfair Display", Georgia, "Times New Roman", serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--stage);
+  background-image:
+    linear-gradient(var(--stage-2) 2px, transparent 2px),
+    linear-gradient(90deg, var(--stage-2) 2px, transparent 2px);
+  background-size: 72px 72px;
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.45;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--p2); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 800; letter-spacing: .01em; line-height: 1.05; text-wrap: balance; margin: 0; }
+.label { font-family: var(--display); font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: 13px; color: var(--muted); }
+
+#app { height: 100%; }
+.screen { height: 100%; overflow-y: auto; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 24px; }
+
+/* ---------- Setup ---------- */
+.brand { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand h1 { font-size: clamp(44px, 8vw, 84px); text-transform: uppercase; line-height: .9; }
+.brand h1 span { color: var(--p1); }
+.brand h1 span + span { color: var(--p2); }
+.brand p { margin: 6px 0 0; color: var(--muted); max-width: 52ch; }
+.panel { background: var(--tile); border: 1px solid var(--edge); border-radius: 10px; padding: 20px; display: grid; gap: 16px; min-width: 0; }
+.setup-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .setup-grid { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 24px; min-width: 0; }
+.field { display: grid; gap: 6px; }
+.field input[type=text], .field input[type=number], .text-in {
+  background: var(--stage); border: 1px solid var(--edge); border-radius: 6px; padding: 10px 12px; width: 100%; min-width: 0;
+}
+.player-row { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; align-items: center; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; }
+.sw1 { background: var(--p1); } .sw2 { background: var(--p2); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; gap: 10px; align-items: flex-start; color: var(--fg); }
+.check input { margin-top: 4px; accent-color: var(--p1); width: 16px; height: 16px; flex: none; }
+.check small { display: block; color: var(--muted); }
+.keys { display: grid; gap: 8px; }
+.key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+kbd {
+  font-family: var(--display); font-weight: 700; font-size: 17px; min-width: 46px; text-align: center;
+  padding: 4px 10px; border-radius: 6px; background: var(--paper); color: var(--ink); box-shadow: 0 3px 0 var(--muted);
+}
+kbd.waiting { background: var(--p1); }
+.btn {
+  border: 1px solid var(--edge); background: var(--stage-2); border-radius: 6px; padding: 8px 14px; font-weight: 600;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.small { padding: 4px 10px; font-size: 14px; }
+.btn.danger { color: var(--danger); }
+.btn.danger.armed { background: var(--danger); color: var(--ink); border-color: var(--danger); }
+.btn.go {
+  background: var(--p1); color: var(--ink); border: none; font-family: var(--display); font-weight: 800; font-size: 26px;
+  text-transform: uppercase; letter-spacing: .06em; padding: 14px 28px; border-radius: 8px; box-shadow: 0 4px 0 #b97614;
+}
+.btn.go:active { transform: translateY(2px); box-shadow: 0 2px 0 #b97614; }
+.btn.go:disabled { opacity: .45; cursor: not-allowed; }
+.head-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.cat-pick {
+  text-align: left; background: var(--stage); border: 2px solid var(--edge); border-radius: 8px; padding: 8px; display: grid; gap: 8px; min-width: 0;
+}
+.cat-pick:hover { border-color: var(--muted); }
+.cat-pick[aria-pressed=true] { border-color: var(--p1); box-shadow: 0 0 0 3px rgb(255 178 62 / .25); }
+.cat-pick:disabled { opacity: .5; cursor: not-allowed; }
+.cat-pick .meta { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; padding: 0 4px 2px; }
+.cat-pick strong { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.1; }
+.cat-pick span { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.start-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.start-row p { margin: 0; color: var(--muted); }
+
+/* ---------- Clue card (shared by duel, thumbnails, manager) ---------- */
+.card {
+  background: var(--paper); color: var(--ink); border-radius: 10px; overflow: hidden; position: relative;
+  aspect-ratio: 16 / 9; max-width: 100%; container-type: inline-size; display: grid; place-items: center;
+}
+.card svg { width: 100%; height: 100%; display: block; }
+.card .hole { fill: var(--paper); }
+.card img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: contain; object-position: center; display: block; }
+.card .credit {
+  position: absolute; right: 0; bottom: 0; max-width: 70%; padding: .3em .7em; font-family: var(--body);
+  font-size: max(9px, 1.05cqw); line-height: 1.25; color: #5d5a66; background: rgb(251 248 241 / .85);
+  border-top-left-radius: 6px; text-align: right; pointer-events: none;
+}
+.clue-item .card .credit { display: none; }
+.clue-item .credit-line { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.tc { font-family: var(--engrave); padding: 0 6cqw; text-align: center; line-height: 1.05; overflow-wrap: anywhere; }
+.tc-dyn { font-style: italic; font-weight: 800; letter-spacing: -.02em; }
+.tc-term { font-style: italic; font-weight: 600; }
+.tc-plain { font-family: var(--body); font-weight: 700; }
+
+/* ---------- Duel ---------- */
+#duel { overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 16px; gap: 12px; }
+#duel[hidden] { display: none !important; }
+.duel-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+.duel-top h2 { font-size: clamp(24px, 3.4vw, 44px); text-transform: uppercase; }
+.duel-top .tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.hint kbd { font-size: 13px; min-width: 0; padding: 1px 7px; box-shadow: 0 2px 0 var(--muted); }
+.stage { container-type: size; display: grid; place-items: center; min-height: 0; position: relative; }
+.stage .card { width: min(100cqw, 100cqh * 16 / 9); box-shadow: 0 18px 60px rgb(0 0 0 / .45); }
+#cover {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 10px;
+  background: var(--stage-2); color: var(--fg); border-radius: 10px;
+}
+#cover h3 { font-size: 11cqw; text-transform: uppercase; color: var(--p1); }
+#cover p { margin: 0; font-size: 2.4cqw; color: var(--muted); }
+#passFlag {
+  position: absolute; top: 4cqw; left: 50%; transform: translateX(-50%); background: var(--danger); color: var(--ink);
+  font-family: var(--display); font-weight: 800; font-size: 5cqw; letter-spacing: .1em; padding: .2em 1em; border-radius: 6px;
+}
+#revealBar {
+  position: absolute; left: 0; right: 0; bottom: 0; background: var(--ink); color: var(--paper);
+  font-family: var(--display); font-weight: 700; font-size: 5.5cqw; text-align: center; padding: .25em .5em; text-transform: uppercase;
+}
+.duel-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+@media (max-width: 700px) { .duel-bottom { grid-template-columns: 1fr 1fr; } .center-slot { grid-column: 1 / -1; order: -1; } }
+.clock {
+  border-radius: 10px; border: 3px solid var(--edge); background: var(--tile); padding: 10px 18px; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; text-align: left; transition: border-color .15s, box-shadow .15s, opacity .15s;
+}
+.clock .who { display: grid; gap: 2px; min-width: 0; }
+.clock .who strong { font-family: var(--display); font-weight: 700; font-size: clamp(20px, 2.6vw, 34px); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock .who small { color: var(--muted); font-size: 13px; }
+.clock .time { font-family: var(--display); font-weight: 800; font-size: clamp(48px, 7.5vw, 112px); line-height: .9; font-variant-numeric: tabular-nums; }
+.clock.c1 .time { color: var(--p1); } .clock.c2 .time { color: var(--p2); }
+.clock.c2 { grid-template-columns: auto minmax(0, 1fr); }
+.clock.c2 .who { order: 2; text-align: right; }
+.clock.c1.on { border-color: var(--p1); box-shadow: 0 0 0 4px rgb(255 178 62 / .25), 0 0 40px rgb(255 178 62 / .25); }
+.clock.c2.on { border-color: var(--p2); box-shadow: 0 0 0 4px rgb(63 211 230 / .25), 0 0 40px rgb(63 211 230 / .25); }
+.clock.idle { opacity: .72; }
+.clock.low .time { color: var(--danger); }
+.clock.out { opacity: .45; }
+.center-slot { display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
+#lastAnswer { font-family: var(--display); font-weight: 700; font-size: clamp(18px, 2.2vw, 30px); text-transform: uppercase; min-height: 1.2em; overflow-wrap: anywhere; }
+#lastAnswer .k { color: var(--good); }
+#clueCount, #hostAnswer { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+#hostAnswer b { color: var(--fg); }
+
+.overlay { position: fixed; inset: 0; background: rgb(8 10 30 / .82); display: grid; place-items: center; z-index: 10; padding: 16px; }
+.overlay .box { background: var(--tile); border: 1px solid var(--edge); border-radius: 12px; padding: 28px; display: grid; gap: 16px; text-align: center; max-width: 560px; width: 100%; }
+.overlay h2 { font-size: clamp(40px, 7vw, 72px); text-transform: uppercase; }
+.overlay p { margin: 0; color: var(--muted); }
+.overlay .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- Manager ---------- */
+.mgr-grid { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .mgr-grid { grid-template-columns: minmax(0, 1fr); } }
+.cat-list { display: grid; gap: 6px; }
+.cat-item { display: flex; justify-content: space-between; gap: 8px; text-align: left; background: var(--stage); border: 1px solid var(--edge); border-radius: 6px; padding: 8px 12px; }
+.cat-item[aria-current=true] { border-color: var(--p1); }
+.cat-item span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.tag { font-size: 11px; font-family: var(--display); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--edge); border-radius: 4px; padding: 1px 6px; }
+.store-note { color: var(--muted); font-size: 14px; margin: 0; }
+.clue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.clue-item { display: grid; gap: 6px; min-width: 0; }
+.clue-item .ans { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.clue-item .row { display: flex; gap: 6px; align-items: center; }
+.clue-item .row input { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px; }
+.add-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+.add-row .field { flex: 1 1 180px; min-width: 0; }
+.file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.msg { color: var(--p1); font-size: 14px; margin: 0; min-height: 1.2em; }
+.muted { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+
+<div id="app">
+  <!-- ===== Setup ===== -->
+  <section id="setup" class="screen">
+    <div class="wrap">
+      <div class="brand">
+        <div>
+          <h1>Floor <span>Du</span><span>el</span></h1>
+          <p>Two clocks, one category. Name the picture, then the clock flips to your opponent. Whoever runs out of time first loses.</p>
+        </div>
+      </div>
+
+      <div class="setup-grid">
+        <div class="col">
+          <div class="panel">
+            <h2>Contestants</h2>
+            <label class="field"><span class="label">Left player</span>
+              <span class="player-row"><span class="swatch sw1"></span><input type="text" id="name1" maxlength="24" value="Player 1"></span></label>
+            <label class="field"><span class="label">Right player</span>
+              <span class="player-row"><span class="swatch sw2"></span><input type="text" id="name2" maxlength="24" value="Player 2"></span></label>
+            <div class="two">
+              <label class="field"><span class="label">Seconds each</span><input type="number" id="secs" min="5" max="300" step="5" value="45"></label>
+              <label class="field"><span class="label">Pass penalty (s)</span><input type="number" id="penalty" min="0" max="10" step="1" value="3"></label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Keyboard</h2>
+            <div class="keys" id="keyList"></div>
+            <p class="muted" style="margin:0;font-size:14px">Also during a duel: <kbd>H</kbd> host peek at the answer, <kbd>F</kbd> full screen, <kbd>Esc</kbd> pause menu.</p>
+          </div>
+
+          <div class="panel">
+            <h2>Options</h2>
+            <label class="check"><input type="checkbox" id="optShowAns" checked><span>Show the answer when advancing<small>The previous answer stays under the card, like on the show.</small></span></label>
+            <label class="check"><input type="checkbox" id="optAutoSwitch"><span>Advance also flips the clocks<small>Off: you press the other player's key yourself.</small></span></label>
+            <label class="check"><input type="checkbox" id="optSound" checked><span>Sound<small>Click on advance, buzzer at zero.</small></span></label>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="panel">
+            <div class="head-row">
+              <h2>Category</h2>
+              <button class="btn" id="openMgr" type="button">Add &amp; edit categories</button>
+            </div>
+            <div class="cat-grid" id="catGrid"></div>
+          </div>
+          <div class="start-row">
+            <button class="btn go" id="startBtn" type="button">Start duel</button>
+            <p id="startNote"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Duel ===== -->
+  <section id="duel" class="screen" hidden>
+    <div class="duel-top">
+      <h2 id="duelCat">Category</h2>
+      <div class="tools">
+        <div class="hint" id="duelHint"></div>
+        <button class="btn small" id="fsBtn" type="button">Full screen</button>
+        <button class="btn small" id="menuBtn" type="button">Menu</button>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="card" id="card">
+        <div id="revealBar" hidden></div>
+        <div id="passFlag" hidden>Pass</div>
+        <div id="cover"><h3 id="coverCat"></h3><p id="coverHint"></p></div>
+      </div>
+    </div>
+    <div class="duel-bottom">
+      <button class="clock c1 idle" id="clock1" type="button">
+        <span class="who"><strong id="cName1">Player 1</strong><small id="cKey1"></small></span>
+        <span class="time" id="cTime1">45</span>
+      </button>
+      <div class="center-slot">
+        <div id="lastAnswer"></div>
+        <div id="clueCount"></div>
+        <div id="hostAnswer" hidden></div>
+      </div>
+      <button class="clock c2 idle" id="clock2" type="button">
+        <span class="who"><strong id="cName2">Player 2</strong><small id="cKey2"></small></span>
+        <span class="time" id="cTime2">45</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ===== Manager ===== -->
+  <section id="manage" class="screen" hidden>
+    <div class="wrap">
+      <div class="head-row">
+        <h1 style="font-size:clamp(36px,6vw,56px);text-transform:uppercase">Categories</h1>
+        <button class="btn" id="closeMgr" type="button">Back to setup</button>
+      </div>
+      <p class="store-note" id="storeNote">Loading saved categories…</p>
+      <div class="mgr-grid">
+        <div class="panel">
+          <span class="label">Built in</span>
+          <div class="cat-list" id="builtinList"></div>
+          <span class="label">Yours</span>
+          <div class="cat-list" id="customList"></div>
+          <form class="field" id="newCatForm">
+            <span class="label">New category</span>
+            <input class="text-in" type="text" id="newCatName" maxlength="40" placeholder="e.g. Composers">
+            <button class="btn" type="submit">Create category</button>
+          </form>
+        </div>
+        <div class="panel" id="catDetail"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="overlay" id="resultOv" hidden>
+    <div class="box">
+      <span class="label" id="resLabel">Winner</span>
+      <h2 id="resTitle">Player wins</h2>
+      <p id="resSub"></p>
+      <div class="row">
+        <button class="btn go" id="rematchBtn" type="button" style="font-size:20px;padding:10px 20px">Rematch <small>(Enter)</small></button>
+        <button class="btn" id="toSetupBtn" type="button">Back to setup (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="pauseOv" hidden>
+    <div class="box">
+      <span class="label">Paused</span>
+      <h2>Clocks stopped</h2>
+      <p>Press a player key or Resume to keep going.</p>
+      <div class="row">
+        <button class="btn go" id="resumeBtn" type="button" style="font-size:20px;padding:10px 20px">Resume</button>
+        <button class="btn" id="restartBtn" type="button">Restart duel</button>
+        <button class="btn" id="quitBtn" type="button">End duel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem("floorduel:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("floorduel:" + k, JSON.stringify(v)); } catch (e) {} },
+};
+
+/* =====================================================================
+   Notation drawing. All clue images are SVG on a 480 x 270 card.
+   ===================================================================== */
+const SP = 22;               // staff space
+const MF = "'Noto Music', 'Bravura', 'Apple Symbols', 'Segoe UI Symbol', serif";
+let fontsDone = false;
+const metricsCache = {};
+function inkMetrics(ch) {
+  if (metricsCache[ch]) return metricsCache[ch];
+  const c = document.createElement("canvas").getContext("2d");
+  c.font = "100px " + MF;
+  const m = c.measureText(ch);
+  const r = { l: m.actualBoundingBoxLeft || 0, r: m.actualBoundingBoxRight || 50, a: m.actualBoundingBoxAscent || 70, d: m.actualBoundingBoxDescent || 0 };
+  if (fontsDone) metricsCache[ch] = r;
+  return r;
+}
+// Fit a font glyph's ink box into a target box.
+function glyph(ch, x, y, w, h, opt = {}) {
+  const m = inkMetrics(ch);
+  const iw = Math.max(1, m.l + m.r), ih = Math.max(1, m.a + m.d);
+  const k = opt.fit === "h" ? h / ih : Math.min(w / iw, h / ih);
+  const ax = opt.ax ?? 0.5;
+  const left = x + (w - iw * k) * ax, top = y + (h - ih * k) / 2;
+  return `<text x="${(left + m.l * k).toFixed(2)}" y="${(top + m.a * k).toFixed(2)}" font-size="${(100 * k).toFixed(2)}" font-family="${MF}" fill="currentColor">${ch}</text>`;
+}
+const svg = (inner, label) => `<svg viewBox="0 0 480 270" role="img" aria-label="${esc(label || "clue")}">${inner}</svg>`;
+const ln = (x1, y1, x2, y2, w) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="currentColor" stroke-width="${w}" stroke-linecap="butt"/>`;
+function staff(x1, x2, T, sp = SP) { let s = ""; for (let i = 0; i < 5; i++) s += ln(x1, T + i * sp, x2, T + i * sp, sp * 0.07); return s; }
+
+const CLEF = {
+  treble: { ch: "\u{1D11E}", bottomD: 30, box: (T, sp) => [T - 1.39 * sp, 7.02 * sp] },
+  bass:   { ch: "\u{1D122}", bottomD: 18, box: (T, sp) => [T - 0.04 * sp, 3.58 * sp] },
+  alto:   { ch: "\u{1D121}", bottomD: 24, box: (T, sp) => [T - 0.02 * sp, 4.04 * sp] },
+};
+function clef(type, x, T, sp = SP) { const c = CLEF[type]; const [y, h] = c.box(T, sp); return glyph(c.ch, x, y, 4 * sp, h, { fit: "h", ax: 0 }); }
+const yOf = (d, type, T, sp = SP) => T + 4 * sp - (d - CLEF[type].bottomD) * sp / 2;
+function ledgers(x, off, T, sp = SP) {
+  let s = ""; const w = sp * 0.09;
+  if (off <= -2) for (let o = -2; o >= off; o -= 2) { const y = T + 4 * sp - o * sp / 2; s += ln(x - 1.05 * sp, y, x + 1.05 * sp, y, w); }
+  if (off >= 10) for (let o = 10; o <= off; o += 2) { const y = T + 4 * sp - o * sp / 2; s += ln(x - 1.05 * sp, y, x + 1.05 * sp, y, w); }
+  return s;
+}
+function flagPath(sx, sy, sp, d) {
+  return `<path d="M${sx} ${sy} C${sx + .15 * sp} ${sy + d * 1.1 * sp} ${sx + 1.25 * sp} ${sy + d * 1.3 * sp} ${sx + .85 * sp} ${sy + d * 2.9 * sp} C${sx + 1.05 * sp} ${sy + d * 1.9 * sp} ${sx + .4 * sp} ${sy + d * 1.6 * sp} ${sx} ${sy + d * 1.25 * sp} Z" fill="currentColor"/>`;
+}
+function note(x, y, o = {}) {
+  const sp = o.sp || SP, type = o.type || "quarter", stem = o.stem || "up";
+  let s = "";
+  if (type === "whole") {
+    s += `<ellipse cx="${x}" cy="${y}" rx="${.82 * sp}" ry="${.52 * sp}" fill="currentColor"/><ellipse class="hole" cx="${x}" cy="${y}" rx="${.38 * sp}" ry="${.27 * sp}" transform="rotate(-55 ${x} ${y})"/>`;
+  } else {
+    s += `<ellipse cx="${x}" cy="${y}" rx="${.66 * sp}" ry="${.46 * sp}" transform="rotate(-22 ${x} ${y})" fill="currentColor"/>`;
+    if (type === "half") s += `<ellipse class="hole" cx="${x}" cy="${y}" rx="${.5 * sp}" ry="${.19 * sp}" transform="rotate(-32 ${x} ${y})"/>`;
+    const w = sp * 0.12, flags = { eighth: 1, sixteenth: 2 }[type] || 0, len = (o.stemLen || 3.5) * sp;
+    if (stem === "up") {
+      const sx = x + .62 * sp - w / 2, y2 = y - len;
+      s += ln(sx, y - .15 * sp, sx, y2, w);
+      for (let i = 0; i < flags; i++) s += flagPath(sx, y2 + i * .9 * sp, sp, 1);
+    } else if (stem === "down") {
+      const sx = x - .62 * sp + w / 2, y2 = y + len;
+      s += ln(sx, y + .15 * sp, sx, y2, w);
+      for (let i = 0; i < flags; i++) s += flagPath(sx, y2 - i * .9 * sp, sp, -1);
+    }
+  }
+  if (o.dot) s += `<circle cx="${x + 1.2 * sp}" cy="${y - (o.dotUp ? sp / 2 : 0)}" r="${.18 * sp}" fill="currentColor"/>`;
+  return s;
+}
+function bar(x1, x2, cy, sp, slope, t) {
+  return `<polygon points="${x1},${cy + slope + t / 2} ${x2},${cy - slope + t / 2} ${x2},${cy - slope - t / 2} ${x1},${cy + slope - t / 2}" fill="currentColor"/>`;
+}
+function sharp(x, y, sp = SP) {
+  const w = sp * .1; let s = "";
+  s += ln(x - .3 * sp, y - 1.3 * sp, x - .3 * sp, y + 1.55 * sp, w);
+  s += ln(x + .3 * sp, y - 1.55 * sp, x + .3 * sp, y + 1.3 * sp, w);
+  s += bar(x - .62 * sp, x + .62 * sp, y - .45 * sp, sp, .18 * sp, .24 * sp);
+  s += bar(x - .62 * sp, x + .62 * sp, y + .45 * sp, sp, .18 * sp, .24 * sp);
+  return s;
+}
+function flat(x, y, sp = SP) {
+  const sx = x - .3 * sp;
+  return ln(sx, y - 2.0 * sp, sx, y + .5 * sp, sp * .1) +
+    `<path d="M${sx} ${y + .5 * sp} C${x + .95 * sp} ${y - .05 * sp} ${x + .7 * sp} ${y - .8 * sp} ${sx} ${y - .22 * sp} L${sx} ${y - .02 * sp} C${x + .35 * sp} ${y - .45 * sp} ${x + .55 * sp} ${y - .05 * sp} ${sx} ${y + .36 * sp} Z" fill="currentColor"/>`;
+}
+function natural(x, y, sp = SP) {
+  const w = sp * .1;
+  return ln(x - .28 * sp, y - 1.45 * sp, x - .28 * sp, y + .55 * sp, w) + ln(x + .28 * sp, y - .55 * sp, x + .28 * sp, y + 1.45 * sp, w) +
+    bar(x - .28 * sp, x + .28 * sp, y - .4 * sp, sp, .1 * sp, .22 * sp) + bar(x - .28 * sp, x + .28 * sp, y + .4 * sp, sp, .1 * sp, .22 * sp);
+}
+// curved tie/slur as a filled crescent; dir 1 bends down
+function arc(x1, x2, y, depth, dir, sp = SP) {
+  const mx = (x1 + x2) / 2, t = sp * .16;
+  return `<path d="M${x1} ${y} Q${mx} ${y + dir * 2 * depth} ${x2} ${y} Q${mx} ${y + dir * 2 * (depth - t)} ${x1} ${y} Z" fill="currentColor"/>`;
+}
+const T0 = 91; // staff top line for clues
+
+/* ---------- Built-in categories ---------- */
+const LETTERS = "CDEFGAB";
+function noteClues(type) {
+  const bottom = CLEF[type].bottomD, out = [];
+  const draw = (d, acc) => () => {
+    const T = T0, x = 300, y = yOf(d, type, T), off = d - bottom;
+    let s = staff(100, 380, T) + clef(type, 110, T) + ledgers(x, off, T) + note(x, y, { stem: off < 4 ? "up" : "down" });
+    if (acc === "#") s += sharp(x - 1.9 * SP, y); if (acc === "b") s += flat(x - 1.9 * SP, y);
+    return svg(s, "note on " + type + " staff");
+  };
+  for (let d = bottom - 4; d <= bottom + 12; d++) out.push({ id: `${type}-${d}`, type: "svg", draw: draw(d), answer: LETTERS[d % 7] });
+  [[1, "#"], [3, "b"], [5, "#"], [6, "b"], [2, "#"], [4, "b"], [7, "#"], [0, "b"]].forEach(([o, acc]) => {
+    const d = bottom + o;
+    out.push({ id: `${type}-${d}${acc}`, type: "svg", draw: draw(d, acc), answer: LETTERS[d % 7] + (acc === "#" ? "♯" : "♭") });
+  });
+  return out;
+}
+const KEYS = [["C", 0, "A minor"], ["G", 1, "E minor"], ["D", 2, "B minor"], ["A", 3, "F♯ minor"], ["E", 4, "C♯ minor"], ["B", 5, "G♯ minor"], ["F♯", 6, "D♯ minor"], ["C♯", 7, "A♯ minor"],
+  ["F", -1, "D minor"], ["B♭", -2, "G minor"], ["E♭", -3, "C minor"], ["A♭", -4, "F minor"], ["D♭", -5, "B♭ minor"], ["G♭", -6, "E♭ minor"], ["C♭", -7, "A♭ minor"]];
+const SHARP_D = [38, 35, 39, 36, 33, 37, 34], FLAT_D = [34, 37, 33, 36, 32, 35, 31];
+function keyClues() {
+  const out = [];
+  for (const type of ["treble", "bass"]) {
+    const shift = type === "treble" ? 0 : -14;
+    for (const [maj, n, min] of KEYS) {
+      if (type === "bass" && n === 0) continue;
+      out.push({
+        id: `key-${type}-${maj}`, type: "svg", answer: `${maj} major / ${min}`,
+        draw: () => {
+          const T = T0; let s = staff(80, 400, T) + clef(type, 90, T);
+          for (let i = 0; i < Math.abs(n); i++) {
+            const d = (n > 0 ? SHARP_D[i] : FLAT_D[i]) + shift, y = yOf(d, type, T), x = 90 + (type === "bass" ? 4.9 : 3.7) * SP + i * (n > 0 ? 1.2 : 1.05) * SP;
+            s += n > 0 ? sharp(x, y) : flat(x, y);
+          }
+          s += ln(398, T, 398, T + 4 * SP, 2);
+          return svg(s, "key signature");
+        },
+      });
+    }
+  }
+  return out;
+}
+function arrow(x1, y1, x2, y2) {
+  const a = Math.atan2(y2 - y1, x2 - x1), L = 20, W = 11, c = "#c8322b";
+  const bx = x2 - L * Math.cos(a), by = y2 - L * Math.sin(a), px = -Math.sin(a) * W, py = Math.cos(a) * W;
+  return `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${c}" stroke-width="6" stroke-linecap="round"/>` +
+    `<polygon points="${x2},${y2} ${bx + px},${by + py} ${bx - px},${by - py}" fill="${c}"/>`;
+}
+function symbolClues() {
+  const T = T0, M = T + 2 * SP, L = (d) => yOf(d, "treble", T), CX = 240;
+  const onStaff = (inner) => staff(110, 370, T) + inner;
+  const big = (ch, h = 170) => glyph(ch, 90, 135 - h / 2, 300, h);
+  const thinThick = (x) => ln(x - 14, T, x - 14, T + 4 * SP, 2.5) + `<rect x="${x - 6}" y="${T}" width="${.5 * SP}" height="${4 * SP}" fill="currentColor"/>`;
+  const dots = (x) => `<circle cx="${x}" cy="${T + 1.5 * SP}" r="${.25 * SP}" fill="currentColor"/><circle cx="${x}" cy="${T + 2.5 * SP}" r="${.25 * SP}" fill="currentColor"/>`;
+  const serif = esc("'Playfair Display', Georgia, serif");
+  const list = [
+    ["Treble clef (G clef)", () => staff(110, 370, T) + clef("treble", 120, T)],
+    ["Bass clef (F clef)", () => staff(110, 370, T) + clef("bass", 120, T)],
+    ["Alto clef (C clef)", () => staff(110, 370, T) + clef("alto", 120, T)],
+    ["Sharp", () => sharp(240, 135, 52)],
+    ["Flat", () => flat(232, 160, 52)],
+    ["Natural", () => natural(240, 135, 52)],
+    ["Double sharp", () => big("\u{1D12A}", 90)],
+    ["Double flat", () => big("\u{1D12B}", 150)],
+    ["Whole note", () => onStaff(note(CX, L(33), { type: "whole" }))],
+    ["Half note", () => onStaff(note(CX, L(33), { type: "half" }))],
+    ["Quarter note", () => onStaff(note(CX, L(33)))],
+    ["Eighth note", () => onStaff(note(CX, L(33), { type: "eighth" }))],
+    ["Sixteenth note", () => onStaff(note(CX, L(33), { type: "sixteenth" }))],
+    ["Dotted half note", () => onStaff(note(CX - 8, L(33), { type: "half", dot: true }))],
+    ["Whole rest", () => onStaff(`<rect x="${CX - .6 * SP}" y="${T + SP}" width="${1.2 * SP}" height="${.5 * SP}" fill="currentColor"/>`)],
+    ["Half rest", () => onStaff(`<rect x="${CX - .6 * SP}" y="${T + 1.5 * SP}" width="${1.2 * SP}" height="${.5 * SP}" fill="currentColor"/>`)],
+    ["Quarter rest", () => onStaff(glyph("\u{1D13D}", CX - 20, M - 1.5 * SP, 40, 3 * SP, { fit: "h" }))],
+    ["Eighth rest", () => onStaff(glyph("\u{1D13E}", CX - 20, M - .7 * SP, 40, 1.7 * SP, { fit: "h" }))],
+    ["Sixteenth rest", () => onStaff(glyph("\u{1D13F}", CX - 20, M - 1.25 * SP, 40, 2.6 * SP, { fit: "h" }))],
+    ["Beam", () => {
+      const y = L(31), xa = 205, xb = 275, sa = xa + .62 * SP - .06 * SP, sb = xb + .62 * SP - .06 * SP, top = y - 3.5 * SP;
+      return onStaff(note(xa, y) + note(xb, y) + `<rect x="${sa - .06 * SP}" y="${top}" width="${sb - sa + .12 * SP}" height="${.5 * SP}" fill="currentColor"/>` + arrow(370, 22, (sa + sb) / 2 + 6, top - 6));
+    }],
+    ["Ledger lines", () => {
+      const x1 = 180, x2 = 300, y1 = yOf(42, "treble", T), y2 = yOf(26, "treble", T);
+      return onStaff(ledgers(x1, 12, T) + note(x1, y1, { type: "whole" }) + ledgers(x2, -4, T) + note(x2, y2, { type: "whole" }) +
+        arrow(x1 + 95, 18, x1 + 1.05 * SP + 6, T - 1.5 * SP) + arrow(x2 + 95, 262, x2 + 1.05 * SP + 6, T + 5.5 * SP));
+    }],
+    ["Tremolo", () => {
+      const y = L(31), sx = CX + .62 * SP - .06 * SP; let s = note(CX, y, { type: "half" });
+      for (let i = 0; i < 3; i++) { const cy = y - 1.6 * SP - i * .75 * SP; s += bar(sx - .7 * SP, sx + .7 * SP, cy, SP, .25 * SP, .3 * SP); }
+      return onStaff(s);
+    }],
+    ["Fermata", () => big("\u{1D110}", 120)],
+    ["Down-bow", () => `<path d="M175 210 V75 H305 V210" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="miter"/><rect x="169" y="69" width="142" height="34" fill="currentColor"/>`],
+    ["Up-bow", () => `<polyline points="180,60 240,215 300,60" fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="miter"/>`],
+    ["Repeat sign", () => {
+      const x = 345;
+      return staff(115, x + 2, T) + dots(x - 30) + thinThick(x) + arrow(x - 110, 252, x - 30, T + 4 * SP + 14);
+    }],
+    ["One-bar repeat (simile mark)", () => {
+      const b1 = 110, b2 = 240, b3 = 370, mx = (b2 + b3) / 2;
+      let s = staff(b1, b3, T) + ln(b2, T, b2, T + 4 * SP, 2.5) + ln(b3 - 1, T, b3 - 1, T + 4 * SP, 2.5);
+      [136, 162, 188, 214].forEach((x, i) => (s += note(x, L([30, 32, 34, 32][i]))));
+      s += `<polygon points="${mx - 1.35 * SP},${T + 3 * SP} ${mx - .55 * SP},${T + 3 * SP} ${mx + 1.35 * SP},${T + SP} ${mx + .55 * SP},${T + SP}" fill="currentColor"/>`;
+      s += `<circle cx="${mx - 1.05 * SP}" cy="${T + 1.5 * SP}" r="${.27 * SP}" fill="currentColor"/><circle cx="${mx + 1.05 * SP}" cy="${T + 2.5 * SP}" r="${.27 * SP}" fill="currentColor"/>`;
+      return s + arrow(mx + 75, 258, mx + 6, T + 4 * SP + 14);
+    }],
+    ["Crescendo", () => `<polyline points="380,95 110,135 380,175" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="miter"/>`],
+    ["Decrescendo (diminuendo)", () => `<polyline points="100,95 370,135 100,175" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="miter"/>`],
+    ["Staccato", () => { const y = L(35); return onStaff(note(CX, y, { stem: "down" }) + `<circle cx="${CX}" cy="${y - 1.1 * SP}" r="${.2 * SP}" fill="currentColor"/>`); }],
+    ["Accent", () => { const y = L(35), a = y - 1.6 * SP; return onStaff(note(CX, y, { stem: "down" }) + `<polyline points="${CX - .75 * SP},${a - .45 * SP} ${CX + .75 * SP},${a} ${CX - .75 * SP},${a + .45 * SP}" fill="none" stroke="currentColor" stroke-width="${.13 * SP}"/>`); }],
+    ["Tenuto", () => { const y = L(35); return onStaff(note(CX, y, { stem: "down" }) + ln(CX - .75 * SP, y - 1.1 * SP, CX + .75 * SP, y - 1.1 * SP, .14 * SP)); }],
+    ["Marcato", () => { const y = L(35), a = y - 1.4 * SP; return onStaff(note(CX, y, { stem: "down" }) + `<polyline points="${CX - .75 * SP},${a} ${CX},${a - 1.4 * SP} ${CX + .75 * SP},${a}" fill="none" stroke="currentColor" stroke-width="${.16 * SP}" stroke-linejoin="miter"/>`); }],
+    ["Tie", () => { const y = L(33), x1 = 185, x2 = 280; return onStaff(note(x1, y, { type: "half" }) + note(x2, y) + arc(x1 + 9, x2 - 8, y + .8 * SP, .55 * SP, 1) + arrow(150, 258, (x1 + x2) / 2 - 2, y + 1.55 * SP)); }],
+    ["Slur", () => { const xs = [180, 237, 295]; return onStaff(note(xs[0], L(30)) + note(xs[1], L(32)) + note(xs[2], L(33)) + arc(xs[0] + 5, xs[2] - 2, L(30) + .9 * SP, .7 * SP, 1) + arrow(150, 258, xs[1] - 6, L(30) + 1.75 * SP)); }],
+    ["Segno", () => big("\u{1D10B}", 170)],
+    ["Coda", () => big("\u{1D10C}", 170)],
+    ["Common time (4/4)", () => staff(110, 370, T) + glyph("\u{1D134}", 210, T + .5 * SP, 60, 3 * SP)],
+    ["Cut time (2/2, alla breve)", () => staff(110, 370, T) + glyph("\u{1D135}", 210, T - .4 * SP, 60, 4.8 * SP)],
+    ["Time signature (4/4)", () => onStaff(`<g font-family="${serif}" font-weight="900" font-size="${2.85 * SP}" text-anchor="middle" fill="currentColor"><text x="${CX}" y="${T + 2 * SP}">4</text><text x="${CX}" y="${T + 4 * SP}">4</text></g>`)],
+    ["Time signature (3/4)", () => {
+      const fs = 2.85 * SP;
+      return onStaff(`<g font-family="${serif}" font-weight="900" font-size="${fs}" text-anchor="middle" fill="currentColor"><text x="${CX}" y="${T + 2 * SP}">3</text><text x="${CX}" y="${T + 4 * SP}">4</text></g>`);
+    }],
+    ["Trill", () => big("\u{1D196}", 120)],
+    ["Breath mark", () => big("\u{1D112}", 130)],
+    ["Pedal mark (sustain pedal down)", () => big("\u{1D1AE}", 110)],
+    ["8va (play an octave higher)", () => `<text x="70" y="150" font-family="${serif}" font-style="italic" font-weight="800" font-size="78" fill="currentColor">8<tspan font-size="50">va</tspan></text><line x1="200" y1="127" x2="400" y2="127" stroke="currentColor" stroke-width="4" stroke-dasharray="14 10"/><line x1="402" y1="125" x2="402" y2="170" stroke="currentColor" stroke-width="4"/>`],
+    ["Triplet", () => {
+      const xs = [190, 240, 290], y = L(32), top = y - 3.5 * SP; let s = "";
+      xs.forEach((x) => (s += note(x, y, { stemLen: 3.5 })));
+      s += `<rect x="${xs[0] + .62 * SP - 1.3}" y="${top}" width="${xs[2] - xs[0] + 2.6}" height="${.5 * SP}" fill="currentColor"/>`;
+      s += `<text x="${xs[1] + .62 * SP}" y="${top - .5 * SP}" text-anchor="middle" font-family="${serif}" font-style="italic" font-weight="800" font-size="${1.8 * SP}" fill="currentColor">3</text>`;
+      return onStaff(s);
+    }],
+  ];
+  return list.map(([answer, f], i) => ({ id: "sym-" + i, type: "svg", answer, draw: () => svg(f(), answer) }));
+}
+function termClues() {
+  const dyn = [["pp", "Pianissimo (very soft)"], ["p", "Piano (soft)"], ["mp", "Mezzo piano (medium soft)"], ["mf", "Mezzo forte (medium loud)"], ["f", "Forte (loud)"], ["ff", "Fortissimo (very loud)"], ["sfz", "Sforzando (sudden strong accent)"], ["fp", "Forte-piano (loud, then soft at once)"]];
+  const terms = [
+    ["ritardando", "Gradually slow down"], ["rallentando", "Gradually slow down"], ["accelerando", "Gradually speed up"], ["a tempo", "Return to the original tempo"],
+    ["crescendo", "Gradually louder"], ["diminuendo", "Gradually softer"], ["poco a poco cresc.", "Get louder little by little"], ["subito", "Suddenly"], ["sempre", "Always"], ["più", "More"], ["meno", "Less"], ["senza", "Without"],
+    ["legato", "Smooth and connected"], ["leggiero", "Lightly"], ["dolce", "Sweetly"], ["cantabile", "In a singing style"], ["sostenuto", "Sustained"], ["pesante", "Heavy sound"], ["con moto", "With motion"],
+    ["sotto voce", "Under the voice (very softly)"], ["glissando", "Slide between notes (also portamento)"],
+    ["pizzicato", "Pluck the strings"], ["arco", "Play with the bow"], ["divisi", "Divide the part between players"], ["tutti", "Everyone plays"], ["con sordino", "With a mute"],
+    ["sul ponticello", "Play near the bridge"], ["sul tasto", "Play near the fingerboard"], ["col legno", "With the wood (back) of the bow"],
+    ["syncopation", "Off-beat rhythms"], ["anacrusis", "Pickup note(s) before the first full measure"], ["timbre", "Tone color (sound quality)"], ["fermata", "Hold the note longer"]];
+  return [...dyn.map(([t, a], i) => ({ id: "dyn-" + i, type: "text", style: "dyn", text: t, answer: a })),
+    ...terms.map(([t, a], i) => ({ id: "term-" + i, type: "text", style: "term", text: t, answer: a }))];
+}
+
+/* ---------- Intervals and triads ---------- */
+const PCS = [0, 2, 4, 5, 7, 9, 11];
+const ACC_NAME = { "-1": "♭", "0": "", "1": "♯" };
+const nm = (d, a) => LETTERS[d % 7] + ACC_NAME[a];
+const semis = (d, a) => Math.floor(d / 7) * 12 + PCS[d % 7] + a;
+const oddSpell = (d, a) => { const l = d % 7; return (a === -1 && (l === 0 || l === 3)) || (a === 1 && (l === 2 || l === 6)); };
+const accAt = (x, y, a) => (a === 1 ? sharp(x, y) : a === -1 ? flat(x, y) : "");
+function rng(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function intervalClues() {
+  const out = [], r = rng(7);
+  const IV = [[2, "2nd", 2, false], [3, "3rd", 4, false], [4, "4th", 5, true], [5, "5th", 7, true], [6, "6th", 9, false], [7, "7th", 11, false], [8, "octave", 12, true]];
+  for (const [n, label, base, perf] of IV) {
+    const quals = perf ? [["Diminished", -1], ["Perfect", 0], ["Augmented", 1]] : [["Diminished", -2], ["Minor", -1], ["Major", 0], ["Augmented", 1]];
+    for (const [q, off] of quals) {
+      const used = new Set(); let made = 0, tries = 0;
+      while (made < 3 && tries < 3000) {
+        tries++;
+        const type = made === 1 ? "bass" : "treble";
+        const lo = type === "treble" ? 29 + Math.floor(r() * 5) : 17 + Math.floor(r() * 5);
+        const la = Math.floor(r() * 3) - 1, hi = lo + n - 1;
+        const ha = base + off - (semis(hi, 0) - semis(lo, la));
+        if (ha < -1 || ha > 1 || oddSpell(lo, la) || oddSpell(hi, ha)) continue;
+        const key = (lo % 7) + "," + la; if (used.has(key)) continue; used.add(key);
+        const t = type;
+        out.push({ id: `int-${n}-${q}-${made}`, type: "svg", answer: `${q} ${label} (${nm(lo, la)}–${nm(hi, ha)})`,
+          draw: () => {
+            const T = T0, x1 = 250, x2 = 345, b = CLEF[t].bottomD, y1 = yOf(lo, t, T), y2 = yOf(hi, t, T);
+            return svg(staff(100, 400, T) + clef(t, 110, T) + ledgers(x1, lo - b, T) + ledgers(x2, hi - b, T) +
+              note(x1, y1, { type: "whole" }) + note(x2, y2, { type: "whole" }) + accAt(x1 - 1.9 * SP, y1, la) + accAt(x2 - 1.9 * SP, y2, ha), "interval");
+          } });
+        made++;
+      }
+    }
+  }
+  return out;
+}
+function triadClues() {
+  const out = [], r = rng(11);
+  const Q = [["Major", 4, 7], ["Minor", 3, 7], ["Diminished", 3, 6], ["Augmented", 4, 8]];
+  for (const [q, t3, t5] of Q) {
+    const used = new Set(); let made = 0, tries = 0;
+    while (made < 8 && tries < 4000) {
+      tries++;
+      const type = made % 2 ? "bass" : "treble";
+      const ro = type === "treble" ? 28 + Math.floor(r() * 6) : 16 + Math.floor(r() * 6);
+      const ra = Math.floor(r() * 3) - 1;
+      const a3 = t3 - (semis(ro + 2, 0) - semis(ro, ra)), a5 = t5 - (semis(ro + 4, 0) - semis(ro, ra));
+      if ([a3, a5].some((a) => a < -1 || a > 1) || oddSpell(ro, ra) || oddSpell(ro + 2, a3) || oddSpell(ro + 4, a5)) continue;
+      const key = (ro % 7) + "," + ra; if (used.has(key)) continue; used.add(key);
+      const t = type, notes = [[ro, ra], [ro + 2, a3], [ro + 4, a5]];
+      out.push({ id: `tri-${q}-${made}`, type: "svg", answer: `${q} triad (${notes.map(([d, a]) => nm(d, a)).join("–")})`,
+        draw: () => {
+          const T = T0, x = 300, b = CLEF[t].bottomD;
+          let s = staff(100, 400, T) + clef(t, 110, T);
+          notes.forEach(([d]) => (s += ledgers(x, d - b, T)));
+          notes.forEach(([d]) => (s += note(x, yOf(d, t, T), { type: "whole" })));
+          let col = 0;
+          [2, 0, 1].forEach((i) => { const [d, a] = notes[i]; if (a) { s += accAt(x - (1.9 + 1.25 * col) * SP, yOf(d, t, T), a); col++; } });
+          return svg(s, "triad");
+        } });
+      made++;
+    }
+  }
+  return out;
+}
+const BUILTIN = [
+  { id: "b-symterms", name: "Symbols & Terms", builtin: true, clues: [...symbolClues(), ...termClues()] },
+  { id: "b-treble", name: "Treble Clef Notes", builtin: true, clues: noteClues("treble") },
+  { id: "b-bass", name: "Bass Clef Notes", builtin: true, clues: noteClues("bass") },
+  { id: "b-alto", name: "Alto Clef Notes", builtin: true, clues: noteClues("alto") },
+  { id: "b-keys", name: "Key Signatures", builtin: true, clues: keyClues() },
+  { id: "b-intervals", name: "Intervals", builtin: true, clues: intervalClues() },
+  { id: "b-triads", name: "Triads", builtin: true, clues: triadClues() },
+];
+
+BUILTIN.push(...[{"id": "b-composers", "name": "Composers", "builtin": true, "clues": [{"id": "c-antonio-vivaldi", "type": "img", "answer": "Antonio Vivaldi", "src": "images/composers/antonio-vivaldi.jpg"}, {"id": "c-johann-sebastian-bach", "type": "img", "answer": "Johann Sebastian Bach", "src": "images/composers/johann-sebastian-bach.jpg"}, {"id": "c-george-frideric-handel", "type": "img", "answer": "George Frideric Handel", "src": "images/composers/george-frideric-handel.jpg"}, {"id": "c-joseph-haydn", "type": "img", "answer": "Joseph Haydn", "src": "images/composers/joseph-haydn.jpg"}, {"id": "c-wolfgang-amadeus-mozart", "type": "img", "answer": "Wolfgang Amadeus Mozart", "src": "images/composers/wolfgang-amadeus-mozart.jpg"}, {"id": "c-ludwig-van-beethoven", "type": "img", "answer": "Ludwig van Beethoven", "src": "images/composers/ludwig-van-beethoven.jpg"}, {"id": "c-franz-schubert", "type": "img", "answer": "Franz Schubert", "src": "images/composers/franz-schubert.jpg"}, {"id": "c-felix-mendelssohn", "type": "img", "answer": "Felix Mendelssohn", "src": "images/composers/felix-mendelssohn.jpg"}, {"id": "c-frdric-chopin", "type": "img", "answer": "Frédéric Chopin", "src": "images/composers/frdric-chopin.jpg"}, {"id": "c-robert-schumann", "type": "img", "answer": "Robert Schumann", "src": "images/composers/robert-schumann.jpg"}, {"id": "c-clara-schumann", "type": "img", "answer": "Clara Schumann", "src": "images/composers/clara-schumann.jpg"}, {"id": "c-franz-liszt", "type": "img", "answer": "Franz Liszt", "src": "images/composers/franz-liszt.jpg"}, {"id": "c-richard-wagner", "type": "img", "answer": "Richard Wagner", "src": "images/composers/richard-wagner.jpg"}, {"id": "c-giuseppe-verdi", "type": "img", "answer": "Giuseppe Verdi", "src": "images/composers/giuseppe-verdi.jpg"}, {"id": "c-johannes-brahms", "type": "img", "answer": "Johannes Brahms", "src": "images/composers/johannes-brahms.jpg"}, {"id": "c-pyotr-ilyich-tchaikovsky", "type": "img", "answer": "Pyotr Ilyich Tchaikovsky", "src": "images/composers/pyotr-ilyich-tchaikovsky.jpg"}, {"id": "c-antonn-dvok", "type": "img", "answer": "Antonín Dvořák", "src": "images/composers/antonn-dvok.jpg"}, {"id": "c-edvard-grieg", "type": "img", "answer": "Edvard Grieg", "src": "images/composers/edvard-grieg.jpg"}, {"id": "c-camille-saint-sans", "type": "img", "answer": "Camille Saint-Saëns", "src": "images/composers/camille-saint-sans.jpg"}, {"id": "c-giacomo-puccini", "type": "img", "answer": "Giacomo Puccini", "src": "images/composers/giacomo-puccini.jpg"}, {"id": "c-gustav-mahler", "type": "img", "answer": "Gustav Mahler", "src": "images/composers/gustav-mahler.jpg"}, {"id": "c-claude-debussy", "type": "img", "answer": "Claude Debussy", "src": "images/composers/claude-debussy.jpg"}, {"id": "c-maurice-ravel", "type": "img", "answer": "Maurice Ravel", "src": "images/composers/maurice-ravel.jpg"}, {"id": "c-sergei-rachmaninoff", "type": "img", "answer": "Sergei Rachmaninoff", "src": "images/composers/sergei-rachmaninoff.jpg"}, {"id": "c-igor-stravinsky", "type": "img", "answer": "Igor Stravinsky", "src": "images/composers/igor-stravinsky.jpg"}, {"id": "c-edward-elgar", "type": "img", "answer": "Edward Elgar", "src": "images/composers/edward-elgar.jpg"}, {"id": "c-jean-sibelius", "type": "img", "answer": "Jean Sibelius", "src": "images/composers/jean-sibelius.jpg"}, {"id": "c-niccol-paganini", "type": "img", "answer": "Niccolò Paganini", "src": "images/composers/niccol-paganini.jpg"}, {"id": "c-hector-berlioz", "type": "img", "answer": "Hector Berlioz", "src": "images/composers/hector-berlioz.jpg"}, {"id": "c-nikolai-rimsky-korsakov", "type": "img", "answer": "Nikolai Rimsky-Korsakov", "src": "images/composers/nikolai-rimsky-korsakov.jpg"}, {"id": "c-scott-joplin", "type": "img", "answer": "Scott Joplin", "src": "images/composers/scott-joplin.jpg"}, {"id": "c-fanny-mendelssohn-hensel", "type": "img", "answer": "Fanny Mendelssohn Hensel", "src": "images/composers/fanny-mendelssohn-hensel.jpg"}]}, {"id": "b-instruments", "name": "Instruments", "builtin": true, "clues": [{"id": "i-violin", "type": "img", "answer": "Violin", "credit": "Photo: Just plain Bill · CC0", "src": "images/instruments/violin.jpg"}, {"id": "i-cello", "type": "img", "answer": "Cello", "credit": "Photo: Georg Feitscher · CC BY 3.0 · Wikimedia Commons", "src": "images/instruments/cello.jpg"}, {"id": "i-double-bass", "type": "img", "answer": "Double bass", "credit": "Photo: AndrewKepert · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/double-bass.jpg"}, {"id": "i-harp", "type": "img", "answer": "Harp", "credit": "Photo: Eacquahdennis · CC BY 4.0 · Wikimedia Commons", "src": "images/instruments/harp.jpg"}, {"id": "i-classical-guitar", "type": "img", "answer": "Classical guitar", "credit": "Photo: Martin Möller · CC BY-SA 2.0 de · Wikimedia Commons", "src": "images/instruments/classical-guitar.jpg"}, {"id": "i-banjo", "type": "img", "answer": "Banjo", "credit": "Photo: Arent · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/banjo.jpg"}, {"id": "i-mandolin", "type": "img", "answer": "Mandolin", "credit": "Photo: Arent · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/mandolin.jpg"}, {"id": "i-sitar", "type": "img", "answer": "Sitar", "credit": "Photo: Sathyadeep · Public domain", "src": "images/instruments/sitar.jpg"}, {"id": "i-flute", "type": "img", "answer": "Flute", "credit": "Photo: Petar Milošević · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/flute.jpg"}, {"id": "i-oboe", "type": "img", "answer": "Oboe", "credit": "Photo: Gebrüder Mönnig, Markneukirchen · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/oboe.jpg"}, {"id": "i-clarinet", "type": "img", "answer": "Clarinet", "credit": "Photo: Herbert Wurlitzer Manufaktur · CC BY 4.0 · Wikimedia Commons", "src": "images/instruments/clarinet.jpg"}, {"id": "i-bass-clarinet", "type": "img", "answer": "Bass clarinet", "credit": "Photo: F. Arthur Uebel GmbH · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/bass-clarinet.jpg"}, {"id": "i-bassoon", "type": "img", "answer": "Bassoon", "credit": "Photo: mark.drummer · CC BY 2.0 · Wikimedia Commons", "src": "images/instruments/bassoon.jpg"}, {"id": "i-saxophone", "type": "img", "answer": "Saxophone", "credit": "Photo: Sally V · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/saxophone.jpg"}, {"id": "i-trumpet", "type": "img", "answer": "Trumpet", "credit": "Photo: PJ (cropped by EWikist) · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/trumpet.jpg"}, {"id": "i-trombone", "type": "img", "answer": "Trombone", "credit": "Photo: Yamaha Corporation · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/trombone.jpg"}, {"id": "i-euphonium", "type": "img", "answer": "Euphonium", "credit": "Photo: Radbert Grimmig · Public domain", "src": "images/instruments/euphonium.jpg"}, {"id": "i-timpani", "type": "img", "answer": "Timpani", "credit": "Photo: Jorge Royan · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/timpani.jpg"}, {"id": "i-snare-drum", "type": "img", "answer": "Snare drum", "credit": "Photo: Stephan Czuratis (Jazz-face) · CC BY-SA 2.5 · Wikimedia Commons", "src": "images/instruments/snare-drum.jpg"}, {"id": "i-glockenspiel", "type": "img", "answer": "Glockenspiel", "credit": "Photo: flamurai · Public domain", "src": "images/instruments/glockenspiel.jpg"}, {"id": "i-cymbals", "type": "img", "answer": "Hi-hat cymbals", "credit": "Photo: Wikimedia Commons file “Aasizzler3.jpg” · CC BY-SA 3.0", "src": "images/instruments/cymbals.jpg"}, {"id": "i-grand-piano", "type": "img", "answer": "Grand piano", "credit": "Photo: Steinway & Sons · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/grand-piano.jpg"}, {"id": "i-harpsichord", "type": "img", "answer": "Harpsichord", "credit": "Photo: Ratigan (instrument et photo) · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/harpsichord.jpg"}, {"id": "i-pipe-organ", "type": "img", "answer": "Pipe organ", "credit": "Photo: José Luiz · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/pipe-organ.jpg"}, {"id": "i-accordion", "type": "img", "answer": "Accordion", "credit": "Photo: Necz0r · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/accordion.jpg"}, {"id": "i-harmonica", "type": "img", "answer": "Harmonica", "credit": "Photo: George Leung · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/harmonica.jpg"}, {"id": "i-english-horn", "type": "img", "answer": "English horn", "credit": "Photo: Hustvedt · CC BY-SA 3.0 · Wikimedia Commons", "src": "images/instruments/english-horn.jpg"}, {"id": "i-french-horn", "type": "img", "answer": "French horn", "credit": "Photo: BenP · CC BY 2.5 · Wikimedia Commons", "src": "images/instruments/french-horn.jpg"}, {"id": "i-tuba", "type": "img", "answer": "Tuba", "credit": "Photo: Yamaha Corporation · CC BY-SA 4.0 · Wikimedia Commons", "src": "images/instruments/tuba.jpg"}]}]);
+
+function renderClue(el, clue) {
+  const keep = [...el.querySelectorAll("#revealBar, #passFlag, #cover")];
+  el.innerHTML = "";
+  const host = document.createElement("div");
+  host.style.cssText = "position:absolute;inset:0;display:grid;place-items:center";
+  if (clue.type === "svg") host.innerHTML = clue.draw();
+  else if (clue.type === "img") { const img = new Image(); img.alt = ""; img.src = clue.src || ("/_blob/" + clue.assetId); host.appendChild(img); }
+  else {
+    const t = clue.text || ""; const n = t.length;
+    const size = clue.style === "dyn" ? (n <= 2 ? 30 : 22) : n <= 6 ? 15 : n <= 10 ? 12 : n <= 16 ? 9 : n <= 30 ? 6.5 : 4.5;
+    host.innerHTML = `<div class="tc tc-${esc(clue.style || "plain")}" style="font-size:${size}cqw">${esc(t)}</div>`;
+  }
+  el.appendChild(host);
+  if (clue.credit) { const cr = document.createElement("div"); cr.className = "credit"; cr.textContent = clue.credit; el.appendChild(cr); }
+  keep.forEach((k) => el.appendChild(k));
+}
+function miniCard(clue) { const c = document.createElement("div"); c.className = "card"; if (clue) renderClue(c, clue); return c; }
+
+/* =====================================================================
+   Saved categories: artifact database + asset store when available,
+   otherwise this browser's IndexedDB.
+   ===================================================================== */
+const Store = {
+  mode: "loading", db: null, assets: null, idb: null, cats: [],
+  newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); },
+  async init() {
+    let db = null, assets = null;
+    if (window.claude && typeof window.claude.use === "function") {
+      try { [db, assets] = await Promise.all([window.claude.use("db"), window.claude.use("assets")]); } catch (e) {}
+    }
+    if (db) { this.db = db; this.assets = assets; this.mode = "cloud"; }
+    else { try { this.idb = await openIDB(); this.mode = "local"; } catch (e) { this.mode = "memory"; } }
+    try { await this.load(); } catch (e) { console.warn(e); this.loadError = true; }
+  },
+  async load() {
+    if (this.mode === "cloud") {
+      const snap = await this.db.collection("categories").get();
+      const cats = await Promise.all(snap.docs.map(async (d) => {
+        const v = d.data() || {};
+        const cs = await this.db.collection(`categories/${d.id}/clues`).get();
+        const clues = cs.docs.map((c) => ({ id: c.id, ...(c.data() || {}) })).sort((a, b) => (a.created || 0) - (b.created || 0));
+        return { id: d.id, name: String(v.name || "Untitled"), created: v.created || 0, clues };
+      }));
+      this.cats = cats.sort((a, b) => a.created - b.created);
+    } else if (this.mode === "local") {
+      const all = await idbReq("readonly", (st) => st.getAll());
+      this.cats = (all || []).sort((a, b) => a.created - b.created);
+    }
+  },
+  async putLocal(cat) { if (this.mode === "local") await idbReq("readwrite", (st) => st.put(cat)); },
+  async createCat(name) {
+    const cat = { id: this.newId(), name, created: Date.now(), clues: [] };
+    if (this.mode === "cloud") await this.db.doc(`categories/${cat.id}`).set({ name, created: cat.created });
+    else await this.putLocal(cat);
+    this.cats.push(cat); return cat;
+  },
+  async renameCat(cat, name) {
+    cat.name = name;
+    if (this.mode === "cloud") await this.db.doc(`categories/${cat.id}`).update({ name });
+    else await this.putLocal(cat);
+  },
+  async deleteCat(cat) {
+    if (this.mode === "cloud") {
+      for (const c of cat.clues) { await this.db.doc(`categories/${cat.id}/clues/${c.id}`).delete(); if (c.assetId && this.assets) { try { await this.assets.delete(c.assetId); } catch (e) {} } }
+      await this.db.doc(`categories/${cat.id}`).delete();
+    } else if (this.mode === "local") await idbReq("readwrite", (st) => st.delete(cat.id));
+    this.cats = this.cats.filter((c) => c !== cat);
+  },
+  clueData(c) { const o = { type: c.type, answer: c.answer, created: c.created }; if (c.type === "img") { o.src = c.src; if (c.assetId) o.assetId = c.assetId; } else { o.text = c.text; o.style = c.style || "plain"; } return o; },
+  async addClue(cat, clue) {
+    clue.id = this.newId(); clue.created = Date.now() + cat.clues.length;
+    if (this.mode === "cloud") await this.db.doc(`categories/${cat.id}/clues/${clue.id}`).set(this.clueData(clue));
+    cat.clues.push(clue);
+    if (this.mode !== "cloud") await this.putLocal(cat);
+  },
+  async updateClue(cat, clue) {
+    if (this.mode === "cloud") await this.db.doc(`categories/${cat.id}/clues/${clue.id}`).update({ answer: clue.answer });
+    else await this.putLocal(cat);
+  },
+  async removeClue(cat, clue) {
+    if (this.mode === "cloud") { await this.db.doc(`categories/${cat.id}/clues/${clue.id}`).delete(); if (clue.assetId && this.assets) { try { await this.assets.delete(clue.assetId); } catch (e) {} } }
+    cat.clues = cat.clues.filter((c) => c !== clue);
+    if (this.mode !== "cloud") await this.putLocal(cat);
+  },
+  canImages() { return this.mode !== "cloud" || !!this.assets; },
+  async imageFrom(file) {
+    const blob = await shrink(file);
+    if (this.mode === "cloud") { const r = await this.assets.upload(blob); return { src: r.url, assetId: r.id }; }
+    return { src: await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); }) };
+  },
+};
+function openIDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("floor-duel", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("cats", { keyPath: "id" });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+function idbReq(mode, fn) {
+  return new Promise((res, rej) => {
+    const tx = Store.idb.transaction("cats", mode); const req = fn(tx.objectStore("cats"));
+    tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  });
+}
+async function shrink(file) {
+  if (/svg|gif/.test(file.type)) return file;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const max = 1600, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    if (k === 1 && file.size < 1.2e6) return file;
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+    return await new Promise((res) => c.toBlob((b) => res(b || file), type, 0.88));
+  } catch (e) { return file; } finally { URL.revokeObjectURL(url); }
+}
+const allCats = () => [...BUILTIN, ...Store.cats];
+
+/* =====================================================================
+   Settings and keys
+   ===================================================================== */
+const ACTIONS = [["p1", "Left player clock (start / stop)"], ["p2", "Right player clock (start / stop)"], ["advance", "Correct, next picture"], ["pass", "Pass (shows answer, clock keeps running)"]];
+const DEFAULT_KEYS = { p1: "KeyA", p2: "KeyL", advance: "Space", pass: "KeyP" };
+let keys = Object.assign({}, DEFAULT_KEYS, ls.get("keys", {}));
+let remapping = null;
+const RESERVED = ["KeyH", "KeyF", "Escape", "Enter", "Tab"];
+function keyName(code) {
+  if (!code) return "?";
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+  const map = { Space: "Space", ShiftLeft: "Left Shift", ShiftRight: "Right Shift", ControlLeft: "Left Ctrl", ControlRight: "Right Ctrl", AltLeft: "Left Alt", AltRight: "Right Alt",
+    ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Backspace: "Backspace", Slash: "/", Period: ".", Comma: ",", Semicolon: ";", Quote: "'", BracketLeft: "[", BracketRight: "]", Backslash: "\\", Minus: "-", Equal: "=" };
+  return map[code] || code;
+}
+function renderKeys() {
+  $("#keyList").innerHTML = ACTIONS.map(([a, label]) =>
+    `<div class="key-row"><span>${esc(label)}</span><kbd class="${remapping === a ? "waiting" : ""}">${remapping === a ? "Press…" : esc(keyName(keys[a]))}</kbd><button class="btn small" type="button" data-remap="${a}">${remapping === a ? "Cancel" : "Change"}</button></div>`).join("");
+}
+$("#keyList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-remap]"); if (!b) return;
+  remapping = remapping === b.dataset.remap ? null : b.dataset.remap; renderKeys();
+});
+
+const settings = Object.assign({ name1: "Player 1", name2: "Player 2", secs: 45, penalty: 3, showAns: true, autoSwitch: false, sound: true, cat: "b-symterms" }, ls.get("settings", {}));
+function loadSettingsUI() {
+  $("#name1").value = settings.name1; $("#name2").value = settings.name2; $("#secs").value = settings.secs; $("#penalty").value = settings.penalty;
+  $("#optShowAns").checked = settings.showAns; $("#optAutoSwitch").checked = settings.autoSwitch; $("#optSound").checked = settings.sound;
+}
+function readSettingsUI() {
+  settings.name1 = $("#name1").value.trim() || "Player 1"; settings.name2 = $("#name2").value.trim() || "Player 2";
+  settings.secs = Math.min(600, Math.max(5, +$("#secs").value || 45)); settings.penalty = Math.min(10, Math.max(0, +$("#penalty").value || 0));
+  settings.showAns = $("#optShowAns").checked; settings.autoSwitch = $("#optAutoSwitch").checked; settings.sound = $("#optSound").checked;
+  ls.set("settings", settings);
+}
+["#name1", "#name2", "#secs", "#penalty", "#optShowAns", "#optAutoSwitch", "#optSound"].forEach((s) => $(s).addEventListener("change", readSettingsUI));
+
+function renderPicker() {
+  if (String(settings.cat).startsWith("b-") && !BUILTIN.some((c) => c.id === settings.cat)) settings.cat = "b-symterms";
+  const grid = $("#catGrid"); grid.innerHTML = "";
+  for (const cat of allCats()) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "cat-pick"; b.setAttribute("aria-pressed", String(settings.cat === cat.id));
+    b.disabled = cat.clues.length === 0;
+    b.appendChild(miniCard(cat.clues[0]));
+    const meta = document.createElement("div"); meta.className = "meta";
+    meta.innerHTML = `<strong>${esc(cat.name)}</strong><span>${cat.clues.length} ${cat.clues.length === 1 ? "picture" : "pictures"}</span>`;
+    b.appendChild(meta);
+    b.addEventListener("click", () => { settings.cat = cat.id; ls.set("settings", settings); renderPicker(); });
+    grid.appendChild(b);
+  }
+  const cat = allCats().find((c) => c.id === settings.cat && c.clues.length);
+  $("#startBtn").disabled = !cat;
+  $("#startNote").textContent = cat ? `${cat.name} · ${settings.secs || 45} seconds each` : "Pick a category with at least one picture.";
+}
+
+/* =====================================================================
+   Sound
+   ===================================================================== */
+let actx = null;
+function beep(freq, dur, type = "sine", vol = 0.15, delay = 0) {
+  if (!settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+const sDing = () => { beep(880, 0.12, "triangle", 0.18); beep(1320, 0.18, "triangle", 0.12, 0.07); };
+const sTick = () => beep(520, 0.05, "square", 0.05);
+const sPass = () => beep(300, 0.25, "sawtooth", 0.08);
+const sBuzz = () => { beep(110, 0.9, "sawtooth", 0.22); beep(116, 0.9, "square", 0.12); };
+
+/* =====================================================================
+   Duel
+   ===================================================================== */
+const G = { cat: null, deck: [], pos: 0, clue: null, num: 0, ms: [0, 0], running: -1, last: 0, started: false, over: false, passing: false, passTimer: 0, peek: false, paused: false };
+let screen = "setup";
+function show(id) { screen = id; ["setup", "duel", "manage"].forEach((s) => ($("#" + s).hidden = s !== id)); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function startDuel() {
+  readSettingsUI();
+  const cat = allCats().find((c) => c.id === settings.cat); if (!cat || !cat.clues.length) return;
+  clearTimeout(G.passTimer);
+  Object.assign(G, { cat, deck: shuffle(cat.clues.slice()), pos: 0, clue: null, num: 0, ms: [settings.secs * 1000, settings.secs * 1000], running: -1, started: false, over: false, passing: false, peek: false, paused: false });
+  $("#duelCat").textContent = cat.name; $("#coverCat").textContent = cat.name;
+  $("#coverHint").textContent = `Press ${keyName(keys.p1)} or ${keyName(keys.p2)} to start that player's clock`;
+  $("#cName1").textContent = settings.name1; $("#cName2").textContent = settings.name2;
+  $("#cKey1").textContent = "Key: " + keyName(keys.p1); $("#cKey2").textContent = "Key: " + keyName(keys.p2);
+  $("#duelHint").innerHTML = `<span><kbd>${esc(keyName(keys.advance))}</kbd> next</span><span><kbd>${esc(keyName(keys.pass))}</kbd> pass</span><span><kbd>H</kbd> peek</span><span><kbd>Esc</kbd> menu</span>`;
+  $("#lastAnswer").textContent = ""; $("#hostAnswer").hidden = true;
+  $("#resultOv").hidden = true; $("#pauseOv").hidden = true;
+  nextClue(true);
+  $("#cover").hidden = false;
+  show("duel"); drawClocks();
+}
+function nextClue(first) {
+  if (!first) { G.pos++; }
+  if (G.pos >= G.deck.length) { const prev = G.clue; G.deck = shuffle(G.cat.clues.slice()); if (G.deck.length > 1 && G.deck[0] === prev) G.deck.push(G.deck.shift()); G.pos = 0; }
+  G.clue = G.deck[G.pos]; G.num++;
+  renderClue($("#card"), G.clue);
+  $("#revealBar").hidden = true; $("#passFlag").hidden = true;
+  $("#cover").hidden = G.started;
+  $("#clueCount").textContent = `Picture ${G.num}`;
+  updatePeek();
+}
+function updatePeek() { const h = $("#hostAnswer"); h.hidden = !G.peek; h.innerHTML = `Host peek: <b>${esc(G.clue ? G.clue.answer : "")}</b>`; }
+function setLast(ans, ok) { $("#lastAnswer").innerHTML = settings.showAns ? `<span class="k">${ok ? "✓" : "Pass:"}</span> ${esc(ans)}` : ""; }
+
+function togglePlayer(i) {
+  if (G.over) return;
+  if (G.paused) resume();
+  if (!G.started) { G.started = true; $("#cover").hidden = true; }
+  if (G.running === i) G.running = -1; else { G.running = i; G.last = performance.now(); }
+  sTick(); drawClocks();
+}
+function advance() {
+  if (!G.started || G.over || G.passing || G.paused) return;
+  setLast(G.clue.answer, true); sDing();
+  nextClue();
+  if (settings.autoSwitch && G.running >= 0) { G.running = 1 - G.running; G.last = performance.now(); }
+  drawClocks();
+}
+function pass() {
+  if (!G.started || G.over || G.passing || G.paused || G.running < 0) return;
+  G.passing = true; sPass();
+  $("#passFlag").hidden = false; const rb = $("#revealBar"); rb.textContent = G.clue.answer; rb.hidden = false;
+  G.passTimer = setTimeout(() => {
+    G.passing = false; if (G.over) return;
+    setLast(G.clue.answer, false); nextClue(); drawClocks();
+  }, settings.penalty * 1000);
+}
+function fmt(ms) { if (ms <= 0) return "0"; if (ms >= 9950) return String(Math.ceil(ms / 1000)); return (ms / 1000).toFixed(1); }
+function drawClocks() {
+  [0, 1].forEach((i) => {
+    const el = $("#clock" + (i + 1));
+    $("#cTime" + (i + 1)).textContent = fmt(G.ms[i]);
+    el.classList.toggle("on", G.running === i);
+    el.classList.toggle("idle", G.running !== i);
+    el.classList.toggle("low", G.ms[i] < 10000);
+    el.classList.toggle("out", G.over && G.ms[i] <= 0);
+  });
+}
+function tick(now) {
+  if (G.running >= 0 && !G.over) {
+    const dt = now - G.last; G.last = now;
+    G.ms[G.running] -= dt;
+    if (G.ms[G.running] <= 0) { G.ms[G.running] = 0; endDuel(G.running); }
+    drawClocks();
+  }
+  requestAnimationFrame(tick);
+}
+function endDuel(loser) {
+  G.over = true; G.running = -1; G.passing = false; clearTimeout(G.passTimer); sBuzz();
+  const names = [settings.name1, settings.name2];
+  $("#resTitle").textContent = `${names[1 - loser]} wins`;
+  $("#resTitle").style.color = loser === 0 ? "var(--p2)" : "var(--p1)";
+  $("#resSub").textContent = `${names[loser]} ran out of time. The picture was: ${G.clue.answer}.`;
+  const rb = $("#revealBar"); rb.textContent = G.clue.answer; rb.hidden = false;
+  drawClocks();
+  setTimeout(() => { if (G.over && screen === "duel") $("#resultOv").hidden = false; }, 900);
+}
+function pause() { if (G.over) return; G.paused = true; G.running = -1; drawClocks(); $("#pauseOv").hidden = false; }
+function resume() { G.paused = false; $("#pauseOv").hidden = true; }
+function quitDuel() { clearTimeout(G.passTimer); G.over = true; G.running = -1; $("#pauseOv").hidden = true; $("#resultOv").hidden = true; renderPicker(); show("setup"); }
+function fullscreen() {
+  try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+}
+
+$("#startBtn").addEventListener("click", () => { beep(1, 0.01, "sine", 0.0001); startDuel(); });
+$("#clock1").addEventListener("click", () => togglePlayer(0));
+$("#clock2").addEventListener("click", () => togglePlayer(1));
+$("#fsBtn").addEventListener("click", fullscreen);
+$("#menuBtn").addEventListener("click", pause);
+$("#resumeBtn").addEventListener("click", resume);
+$("#restartBtn").addEventListener("click", startDuel);
+$("#quitBtn").addEventListener("click", quitDuel);
+$("#rematchBtn").addEventListener("click", startDuel);
+$("#toSetupBtn").addEventListener("click", quitDuel);
+
+document.addEventListener("keydown", (e) => {
+  if (remapping) {
+    e.preventDefault();
+    if (e.code === "Escape") { remapping = null; renderKeys(); return; }
+    if (RESERVED.includes(e.code)) return;
+    const other = Object.keys(keys).find((a) => a !== remapping && keys[a] === e.code);
+    if (other) keys[other] = keys[remapping];
+    keys[remapping] = e.code; remapping = null; ls.set("keys", keys); renderKeys(); renderPicker(); return;
+  }
+  if (screen !== "duel") return;
+  if (e.target.closest && e.target.closest("input, textarea")) return;
+  const c = e.code, mapped = Object.values(keys).includes(c);
+  if (mapped || c === "Space") e.preventDefault();
+  if (e.repeat) return;
+  if (c === keys.p1) return togglePlayer(0);
+  if (c === keys.p2) return togglePlayer(1);
+  if (c === keys.advance) return advance();
+  if (c === keys.pass) return pass();
+  if (c === "KeyH") { G.peek = !G.peek; return updatePeek(); }
+  if (c === "KeyF") return fullscreen();
+  if (c === "Enter" && G.over) return startDuel();
+  if (c === "Escape") { if (G.over) return quitDuel(); return G.paused ? resume() : pause(); }
+});
+// Keep focus off clock buttons so Space never "clicks" them.
+document.addEventListener("mouseup", (e) => { const b = e.target.closest && e.target.closest(".clock"); if (b) b.blur(); });
+
+/* =====================================================================
+   Category manager
+   ===================================================================== */
+let mgrSel = "b-symterms";
+function storeNote() {
+  const n = $("#storeNote");
+  if (Store.mode === "loading") n.textContent = "Loading saved categories…";
+  else if (Store.mode === "cloud") n.textContent = Store.assets ? "Your categories save with this page, so they show up on any device where you open it." : "Your categories save with this page. Picture uploads need edit access, so you can add text cards only.";
+  else if (Store.mode === "local") n.textContent = "Your categories save in this browser on this computer.";
+  else n.textContent = "This browser blocks storage, so new categories last only until you close the page.";
+  if (Store.loadError) n.textContent += " Saved categories could not be loaded right now; reload to try again.";
+}
+function renderMgr() {
+  storeNote();
+  const item = (cat) => `<button type="button" class="cat-item" data-cat="${esc(cat.id)}" aria-current="${cat.id === mgrSel}"><strong>${esc(cat.name)}</strong><span>${cat.clues.length}</span></button>`;
+  $("#builtinList").innerHTML = BUILTIN.map(item).join("");
+  $("#customList").innerHTML = Store.cats.length ? Store.cats.map(item).join("") : `<p class="muted" style="margin:0;font-size:14px">None yet. Create one below.</p>`;
+  renderDetail();
+}
+function renderDetail() {
+  const cat = allCats().find((c) => c.id === mgrSel) || BUILTIN[0];
+  const d = $("#catDetail"); d.innerHTML = "";
+  const head = document.createElement("div"); head.className = "head-row";
+  if (cat.builtin) {
+    head.innerHTML = `<h2>${esc(cat.name)}</h2><span class="tag">Built in</span>`;
+  } else {
+    head.innerHTML = `<input class="text-in" id="renameIn" type="text" maxlength="40" value="${esc(cat.name)}" style="flex:1;min-width:0;font-family:var(--display);font-size:24px;font-weight:700"><button class="btn danger" id="delCat" type="button">Delete category</button>`;
+  }
+  d.appendChild(head);
+  const msg = document.createElement("p"); msg.className = "msg"; msg.id = "mgrMsg"; d.appendChild(msg);
+
+  if (!cat.builtin) {
+    const add = document.createElement("div"); add.className = "panel"; add.style.background = "var(--stage)";
+    add.innerHTML = `
+      <span class="label">Add pictures</span>
+      <div class="add-row">
+        <span class="btn file-btn ${Store.canImages() ? "" : "muted"}">Choose image files<input type="file" id="imgIn" accept="image/*" multiple ${Store.canImages() ? "" : "disabled"}></span>
+        <span class="muted" style="font-size:14px">The file name becomes the answer. You can edit it after.</span>
+      </div>
+      <span class="label">Or add a text card</span>
+      <form class="add-row" id="textForm">
+        <label class="field"><span class="muted" style="font-size:14px">Shown on screen</span><input class="text-in" id="tcText" type="text" maxlength="60" placeholder="e.g. Pizzicato"></label>
+        <label class="field"><span class="muted" style="font-size:14px">Answer</span><input class="text-in" id="tcAns" type="text" maxlength="80" placeholder="e.g. Pluck the strings"></label>
+        <button class="btn" type="submit">Add card</button>
+      </form>`;
+    d.appendChild(add);
+  }
+  const grid = document.createElement("div"); grid.className = "clue-grid";
+  if (!cat.clues.length) grid.innerHTML = `<p class="muted" style="margin:0">No pictures yet. Add image files or text cards above.</p>`;
+  cat.clues.forEach((clue) => {
+    const it = document.createElement("div"); it.className = "clue-item";
+    it.appendChild(miniCard(clue));
+    const row = document.createElement("div"); row.className = "row";
+    if (cat.builtin) row.innerHTML = `<span class="ans">${esc(clue.answer)}</span>`;
+    else {
+      row.innerHTML = `<input class="text-in" type="text" id="ans-${esc(clue.id)}" value="${esc(clue.answer)}" aria-label="Answer"><button class="btn small danger" type="button" aria-label="Remove">✕</button>`;
+      const inp = row.querySelector("input"), del = row.querySelector("button");
+      inp.addEventListener("change", async () => { clue.answer = inp.value.trim() || clue.answer; inp.value = clue.answer; try { await Store.updateClue(cat, clue); say("Answer saved."); } catch (e) { say("Could not save that answer. Try again."); } });
+      del.addEventListener("click", async () => {
+        if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = "Remove?"; setTimeout(() => { del.classList.remove("armed"); del.textContent = "✕"; }, 3000); return; }
+        try { await Store.removeClue(cat, clue); renderMgr(); } catch (e) { say("Could not remove that picture. Try again."); }
+      });
+    }
+    it.appendChild(row);
+    if (clue.credit) { const cl = document.createElement("div"); cl.className = "credit-line"; cl.textContent = clue.credit; it.appendChild(cl); }
+    grid.appendChild(it);
+  });
+  d.appendChild(grid);
+
+  if (!cat.builtin) {
+    $("#renameIn").addEventListener("change", async (e) => { const v = e.target.value.trim(); if (!v) { e.target.value = cat.name; return; } try { await Store.renameCat(cat, v); renderMgr(); say("Renamed."); } catch (er) { say("Could not rename. Try again."); } });
+    const delBtn = $("#delCat");
+    delBtn.addEventListener("click", async () => {
+      if (!delBtn.classList.contains("armed")) { delBtn.classList.add("armed"); delBtn.textContent = `Delete ${cat.clues.length} pictures? Click again`; setTimeout(() => { if (delBtn.isConnected) { delBtn.classList.remove("armed"); delBtn.textContent = "Delete category"; } }, 4000); return; }
+      try { await Store.deleteCat(cat); mgrSel = "b-symterms"; renderMgr(); } catch (e) { say("Could not delete the category. Try again."); }
+    });
+    const imgIn = $("#imgIn");
+    imgIn && imgIn.addEventListener("change", async () => {
+      const files = [...imgIn.files]; if (!files.length) return;
+      let done = 0, failed = 0;
+      for (const f of files) {
+        say(`Adding ${done + 1} of ${files.length}…`);
+        try {
+          const im = await Store.imageFrom(f);
+          const answer = f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() || "Answer";
+          await Store.addClue(cat, { type: "img", answer, ...im }); done++;
+        } catch (e) { failed++; console.warn(e); }
+      }
+      renderMgr();
+      say(failed ? `Added ${done}. ${failed} could not be added; check that they are images under 20 MB.` : `Added ${done} ${done === 1 ? "picture" : "pictures"}.`);
+    });
+    $("#textForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const t = $("#tcText").value.trim(), a = $("#tcAns").value.trim();
+      if (!t || !a) { say("Fill in both the card text and the answer."); return; }
+      try { await Store.addClue(cat, { type: "text", style: "plain", text: t, answer: a }); renderMgr(); $("#tcText").focus(); say("Card added."); } catch (er) { say("Could not add the card. Try again."); }
+    });
+  }
+}
+function say(t) { const m = $("#mgrMsg"); if (m) m.textContent = t; }
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-cat]"); if (b) { mgrSel = b.dataset.cat; renderMgr(); } });
+$("#openMgr").addEventListener("click", () => { mgrSel = settings.cat; renderMgr(); show("manage"); });
+$("#closeMgr").addEventListener("click", () => { renderPicker(); show("setup"); });
+$("#newCatForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("#newCatName").value.trim(); if (!name) return;
+  if (Store.mode === "loading") { say("Still loading saved categories. Try again in a moment."); return; }
+  try { const cat = await Store.createCat(name); $("#newCatName").value = ""; mgrSel = cat.id; renderMgr(); } catch (er) { say("Could not create the category. Try again."); }
+});
+
+/* =====================================================================
+   Boot
+   ===================================================================== */
+loadSettingsUI(); renderKeys(); renderPicker(); requestAnimationFrame(tick);
+(async () => {
+  try {
+    const chars = "\u{1D11E}\u{1D122}\u{1D121}\u{1D110}\u{1D10B}\u{1D10C}\u{1D134}\u{1D135}\u{1D13D}\u{1D13E}\u{1D196}\u{1D112}\u{1D1AE}\u{1D12A}\u{1D12B}";
+    await Promise.race([Promise.all([document.fonts.load("100px 'Noto Music'", chars), document.fonts.load("italic 800 40px 'Playfair Display'", "8va3"), document.fonts.load("900 40px 'Playfair Display'", "34")]), new Promise((r) => setTimeout(r, 4000))]);
+  } catch (e) {}
+  fontsDone = true;
+  if (screen === "setup") renderPicker(); else if (screen === "manage") renderDetail(); else if (G.clue && G.clue.type === "svg") renderClue($("#card"), G.clue);
+})();
+(async () => {
+  await Store.init();
+  if (screen === "setup") renderPicker(); else if (screen === "manage") renderMgr();
+})();
+</script>
+
+</body>
+</html>
